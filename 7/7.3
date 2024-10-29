@@ -1,0 +1,30 @@
+import http.client
+
+def fetch_page(url):
+    if not url.startswith("http://"):
+        url = "http://" + url
+
+    host = url.split("/")[2]
+    path = "/" + "/".join(url.split("/")[3:])
+
+    connection = http.client.HTTPConnection(host)
+
+    try:
+       
+        connection.request("GET", path)
+    
+        response = connection.getresponse()
+     
+        print(f"Статус: {response.status} {response.reason}")
+                                           
+        page_content = response.read().decode('utf-8')
+        print(page_content)
+
+    except Exception as e:
+        print(f"Произошла ошибка: {e}")
+
+    finally:
+        connection.close()
+
+if __name__ == "__main__":
+    fetch_page("rokot.ibst.psu/anatoly/")
