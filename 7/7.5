@@ -1,73 +1,80 @@
-import http.client
 import os
-from urllib.parse import urljoin
-from bs4 import BeautifulSoup
 import requests
+from bs4 import BeautifulSoup
+from urllib.parse import urljoin
 
-def fetch_images_from_page(url, visited):
-    # Проверяем, если URL уже был посещен
-    if url in visited:
-        return
-    visited.add(url)
+# URL для загрузки
+url = "http://rokot.ibst.psu/anatoly/"
 
-    # Убедимся, что URL начинается с http://
-    if not url.startswith("http://"):
-        url = "http://" + url
-
-    # Извлекаем хост и путь из URL
-    host = url.split("/")[2]
-    path = "/" + "/".join(url.split("/")[3:]) or "/"
-
-    # Создаем соединение
-    connection = http.client.HTTPConnection(host)
-
+def save_images_from_page(page_url):
     try:
-        # Отправляем GET-запрос
-        connection.request("GET", path)
+        # Выполняем GET-запрос
+        response = requests.get(page_url)
 
-        # Получаем ответ
-        response = connection.getresponse()
+        # Проверяем, успешен ли запрос
+        if response.status_code == 200:
+            print(f"Страница успешно загружена: {page_url}")
+            
+            # Парсим HTML-код страницы
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # Находим все теги <img> на странице
+            img_tags = soup.find_all('img')
 
-        # Проверяем статус ответа
-        print(f"Статус: {response.status} {response.reason}")
+            for img in img_tags:
+                # Получаем URL изображения
+                img_url = urljoin(page_url, img['src'])
+                print(f"Загружаем изображение: {img_url}")
 
-        # Читаем содержимое страницы
-        page_content = response.read().decode('utf-8')
+                # Загружаем изображение
+                img_response = requests.get(img_url)
+                
+                if img_response.status_code == 200:
+                    # Определяем имя файла
+                    img_name = os.path.join('images', os.path.basename(img_url))
+                    
+                    # Сохраняем изображение в файл
+                    with open(img_name, 'wb') as f:
+                        f.write(img_response.content)
+                    print(f"Изображение сохранено как: {img_name}")
+                else:
+                    print(f"Не удалось загрузить изображение. Статус код: {img_response.status_code}")
+        else:
+            print(f"Не удалось загрузить страницу. Статус код: {response.status_code}")
 
-        # Парсим HTML с помощью BeautifulSoup
-        soup = BeautifulSoup(page_content, 'html.parser')
+    except requests.exceptions.RequestException as e:
+        print(f"Произошла ошибка при загрузке страницы {page_url}: {e}")
 
-        # Извлекаем все изображения
-        img_tags = soup.find_all('img')
-        img_urls = [urljoin(url, img['src']) for img in img_tags if 'src' in img.attrs]
+try:
+    # Создаем папку для сохранения изображений
+    os.makedirs('images', exist_ok=True)
 
-        # Создаем директорию для изображений, если она не существует
-        os.makedirs('images', exist_ok=True)
+    # Выполняем GET-запрос к исходной странице
+    response = requests.get(url)
 
-        # Загружаем и сохраняем каждое изображение
-        for img_url in img_urls:
-            try:
-                img_data = requests.get(img_url).content
-                img_name = os.path.join('images', img_url.split('/')[-1])
-                with open(img_name, 'wb') as f:
-                    f.write(img_data)
-                print(f"Сохранено изображение: {img_name}")
-            except Exception as e:
-                print(f"Не удалось загрузить изображение {img_url}: {e}")
+    # Проверяем, успешен ли запрос
+    if response.status_code == 200:
+        print("Исходная страница успешно загружена!")
+        
+        # Парсим HTML-код страницы
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # Сохраняем изображения с исходной страницы
+        save_images_from_page(url)
 
-        # Извлекаем все ссылки на странице
+        # Находим все ссылки на странице
         links = soup.find_all('a')
+
         for link in links:
-            href = link.get('href')
-            if href and href.startswith(('http://', 'https://')):
-                fetch_images_from_page(href, visited)
+            # Получаем URL ссылки
+            page_url = urljoin(url, link.get('href'))
+            print(f"Переход к странице: {page_url}")
 
-    except Exception as e:
-        print(f"Произошла ошибка: {e}")
+            # Сохраняем изображения с каждой найденной страницы
+            save_images_from_page(page_url)
 
-    finally:
-        connection.close()
+    else:
+        print(f"Не удалось загрузить исходную страницу. Статус код: {response.status_code}")
 
-if __name__ == "__main__":
-    visited_links = set()
-    fetch_images_from_page("http://rokot.ibst.psu/anatoly/", visited_links)
+except requests.exceptions.RequestException as e:
+    print(f"Произошла ошибка: {e}")
